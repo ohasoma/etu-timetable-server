@@ -15,7 +15,7 @@ import os
 timetable_true = {"月":["保健体育Ⅳ(4E)","半導体デバイス工学(4E)","電子物性(4E)","特別講義(4E)"],
                   "火":["電気機器Ⅱ(4E)","電子回路Ⅱ(4E)","情報通信工学Ⅰ(4E)","電気磁気学Ⅱ(4E)"],
                   "水":["プログラミングⅢ(4E)","電気回路Ⅱ(4E)","応用数学B(4E)","HR(4E)"],
-                  "木":["哲学(4E)","創造工学実験(4E)","創造工学実験(4E)","創造工学実験(4E)"],
+                  "木":["哲学(4E)","創造工学実験(4E)"],#,"創造工学実験(4E)","創造工学実験(4E)"],
                   "金":["英語講読Ⅱ(4E)","応用数学A(4E)","日本文学(4E)","特別講義(4E)"],}
 
 # -----------------------------
@@ -107,7 +107,8 @@ if current_date and buffer:
 driver.quit()
 
 for d in timetable:
-    timetable[d] = timetable[d][::2]
+    buffer = list(dict.fromkeys(timetable[d]))
+    timetable[d] = [subject for subject in buffer if subject != ""]
 
 # -----------------------------
 # 6. 結果を表示
@@ -187,7 +188,7 @@ for d, subjects in timetable.items():
             "expected": expected_norm,
         }
 
-        subjects_norm = [s.replace("(3E)","") for s in subjects_norm] #(3E)を消す
+        subjects_norm = [s.replace("(4E)","") for s in subjects_norm] #(4E)を消す
         subjects = []
         TimeTable = {}
 
