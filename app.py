@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from selenium.webdriver.chrome.options import Options
 from dotenv import load_dotenv
 import os
+import threading
 
 timetable_true = {"月":["保健体育Ⅳ(4E)","半導体デバイス工学(4E)","電子物性(4E)","特別講義(4E)"],
                   "火":["電気機器Ⅱ(4E)","電子回路Ⅱ(4E)","情報通信工学Ⅰ(4E)","電気磁気学Ⅱ(4E)"],
@@ -18,217 +19,225 @@ timetable_true = {"月":["保健体育Ⅳ(4E)","半導体デバイス工学(4E)"
                   "木":["哲学(4E)","創造工学実験(4E)"],#,"創造工学実験(4E)","創造工学実験(4E)"],
                   "金":["英語講読Ⅱ(4E)","応用数学A(4E)","日本文学(4E)","特別講義(4E)"],}
 
-# -----------------------------
-# 1. Chrome を起動 このPCで
-# -----------------------------
-#driver = webdriver.Chrome()
+def scraping():
+    global TimeTables
 
-# -----------------------------
-# 1. Chrome を VPS 用に起動
-# -----------------------------
-options = Options()
-options.add_argument("--headless=new")  # 新しいヘッドレスモード
-options.add_argument("--no-sandbox")  # root 実行時に必須
-options.add_argument("--disable-dev-shm-usage")  # VPS では必須
-options.add_argument("--disable-gpu") #GPU無効化
-options.add_argument("--disable-software-rasterizer")# ソフトウェアによる描画処理を無効化。GPU がない環境での描画エラーを防ぐ。
-options.add_argument("--window-size=1920,1080") #- 仮想ブラウザの画面サイズを指定。
+    while True:
+        # -----------------------------
+        # 1. Chrome を VPS 用に起動
+        # -----------------------------
+        options = Options()
+        options.add_argument("--headless=new")  # 新しいヘッドレスモード
+        options.add_argument("--no-sandbox")  # root 実行時に必須
+        options.add_argument("--disable-dev-shm-usage")  # VPS では必須
+        options.add_argument("--disable-gpu") #GPU無効化
+        options.add_argument("--disable-software-rasterizer")# ソフトウェアによる描画処理を無効化。GPU がない環境での描画エラーを防ぐ。
+        options.add_argument("--window-size=1920,1080") #- 仮想ブラウザの画面サイズを指定。
 
-driver = webdriver.Chrome(options=options)#設定したオプションをChromeに渡す
+        driver = webdriver.Chrome(options=options)#設定したオプションをChromeに渡す
 
 
-# -----------------------------
-# 2. ログインページへアクセス
-# -----------------------------
-driver.get("https://std.ishikawa-nct.ac.jp/login")
-time.sleep(1)
+        # -----------------------------
+        # 2. ログインページへアクセス
+        # -----------------------------
+        driver.get("https://std.ishikawa-nct.ac.jp/login")
+        time.sleep(1)
 
-# -----------------------------
-# 3. ログイン処理
-# -----------------------------
-load_dotenv()  # .env を読み込む
+        # -----------------------------
+        # 3. ログイン処理
+        # -----------------------------
+        load_dotenv()  # .env を読み込む
 
-LOGIN_ID = os.getenv("LOGIN_ID")
-PASSWORD = os.getenv("PASSWORD")
+        LOGIN_ID = os.getenv("LOGIN_ID")
+        PASSWORD = os.getenv("PASSWORD")
 
-driver.find_element(By.ID, "login-user").send_keys(LOGIN_ID)
-driver.find_element(By.ID, "login-password").send_keys(PASSWORD)
-driver.find_element(By.NAME, "act").click()
+        driver.find_element(By.ID, "login-user").send_keys(LOGIN_ID)
+        driver.find_element(By.ID, "login-password").send_keys(PASSWORD)
+        driver.find_element(By.NAME, "act").click()
 
-time.sleep(2)
+        time.sleep(2)
 
-# -----------------------------
-# 4. 時間割ページへ移動
-# -----------------------------
-TIMETABLE_URL = "https://std.ishikawa-nct.ac.jp/"  # 必要に応じて変更
-driver.get(TIMETABLE_URL)
-time.sleep(2)
+        # -----------------------------
+        # 4. 時間割ページへ移動
+        # -----------------------------
+        TIMETABLE_URL = "https://std.ishikawa-nct.ac.jp/"  # 必要に応じて変更
+        driver.get(TIMETABLE_URL)
+        time.sleep(2)
 
-# -----------------------------
-# 5. HTML を取得して BeautifulSoup で解析
-# -----------------------------
-soup = BeautifulSoup(driver.page_source, "html.parser")
+        # -----------------------------
+        # 5. HTML を取得して BeautifulSoup で解析
+        # -----------------------------
+        soup = BeautifulSoup(driver.page_source, "html.parser")
 
-# 時間割の <tr> を取得（class="text-center"）
-rows = soup.find_all("tr", class_="text-center")
+        # 時間割の <tr> を取得（class="text-center"）
+        rows = soup.find_all("tr", class_="text-center")
 
-timetable = {}
-current_date = None
-buffer = []
+        timetable = {}
+        current_date = None
+        buffer = []
 
-for row in rows:
-    tds = row.find_all("td")
+        for row in rows:
+            tds = row.find_all("td")
 
-    # 日付セル（rowspan がある）
-    if tds and "rowspan" in tds[0].attrs:
-        # 前の日付のデータを保存
+            # 日付セル（rowspan がある）
+            if tds and "rowspan" in tds[0].attrs:
+                # 前の日付のデータを保存
+                if current_date and buffer:
+                    timetable[current_date] = buffer
+                    buffer = []
+
+                current_date = tds[0].get_text(strip=True)
+                tds = tds[1:]  # 日付セルを除く
+
+            # 授業番号行（1,2,3,4 / 5,6,7,8）
+            texts = [td.get_text(strip=True) for td in tds]
+
+            # 空欄を除いて、すべて数字なら番号行としてスキップ
+            if all(t.isdigit() for t in texts if t != ""):
+                continue
+
+            # 授業名行
+            subjects = [td.get_text(strip=True) for td in tds]
+            buffer.extend(subjects)
+
+        # 最後の日付も保存
         if current_date and buffer:
             timetable[current_date] = buffer
-            buffer = []
 
-        current_date = tds[0].get_text(strip=True)
-        tds = tds[1:]  # 日付セルを除く
+        driver.quit()
 
-    # 授業番号行（1,2,3,4 / 5,6,7,8）
-    texts = [td.get_text(strip=True) for td in tds]
+        for d in timetable:
+            buffer = list(dict.fromkeys(timetable[d]))
+            timetable[d] = [subject for subject in buffer if subject != ""]
 
-    # 空欄を除いて、すべて数字なら番号行としてスキップ
-    if all(t.isdigit() for t in texts if t != ""):
-        continue
-
-    # 授業名行
-    subjects = [td.get_text(strip=True) for td in tds]
-    buffer.extend(subjects)
-
-# 最後の日付も保存
-if current_date and buffer:
-    timetable[current_date] = buffer
-
-driver.quit()
-
-for d in timetable:
-    buffer = list(dict.fromkeys(timetable[d]))
-    timetable[d] = [subject for subject in buffer if subject != ""]
-
-# -----------------------------
-# 6. 結果を表示
-# -----------------------------
-for d, subjects in timetable.items():
-    print(f"=== {d} ===")
-    for i, sub in enumerate(subjects, start=1):
-        print(f"{i}コマ目: {sub}")
-    print()
+        # -----------------------------
+        # 6. 結果を表示
+        # -----------------------------
+        for d, subjects in timetable.items():
+            print(f"=== {d} ===")
+            for i, sub in enumerate(subjects, start=1):
+                print(f"{i}コマ目: {sub}")
+            print()
 
 
-#timetable編集
+        #timetable編集
 
-timetable2 = copy.deepcopy(timetable)
+        timetable2 = copy.deepcopy(timetable)
 
-today = list(timetable2.keys())[0]
+        today = list(timetable2.keys())[0]
 
-today_timetable = timetable2.pop(today)
+        today_timetable = timetable2.pop(today)
 
-print(f'今日の時間割:{today_timetable}')
-print()
+        print(f'今日の時間割:{today_timetable}')
+        print()
 
-#---------------------------------------------------------------------------------------------------------
+        #---------------------------------------------------------------------------------------------------------
 
-def get_weekday_from_tail(date_str):
-    # 例: "12月29日(月)" → "月"
-    if len(date_str) < 2:
-        return None
-    return date_str[-2]  # 後ろから2番目
+        def get_weekday_from_tail(date_str):
+            # 例: "12月29日(月)" → "月"
+            if len(date_str) < 2:
+                return None
+            return date_str[-2]  # 後ろから2番目
 
-def normalize(s):
-    if not s:
-        return s
+        def normalize(s):
+            if not s:
+                return s
 
-    # 全角カッコを半角に
-    s = s.replace("（", "(").replace("）", ")")
+            # 全角カッコを半角に
+            s = s.replace("（", "(").replace("）", ")")
 
-    # ローマ数字を統一
-    s = s.replace("Ⅰ", "I").replace("Ⅱ", "II").replace("Ⅲ", "III").replace("Ⅳ","IV")
+            # ローマ数字を統一
+            s = s.replace("Ⅰ", "I").replace("Ⅱ", "II").replace("Ⅲ", "III").replace("Ⅳ","IV")
 
-    # 全角スペース削除
-    s = s.replace("　", "")
+            # 全角スペース削除
+            s = s.replace("　", "")
 
-    # 余分なスペース削除
-    s = re.sub(r"\s+", "", s)
-    
-    return s
+            # 余分なスペース削除
+            s = re.sub(r"\s+", "", s)
+            
+            return s
 
-#時間取得
-now_jst = datetime.now(ZoneInfo("Asia/Tokyo"))
-formatted_time = now_jst.isoformat(timespec='seconds')
+        diff = {}
+        main_timetable = []
 
+        for d, subjects in timetable.items():
+            weekday = get_weekday_from_tail(d)
 
-diff = {}
-TimeTables = {"generated_at":formatted_time}
-main_timetable = []
+            # 土日スキップ
+            if weekday in ["土", "日"]:
+                continue
 
-for d, subjects in timetable.items():
-    weekday = get_weekday_from_tail(d)
+            if subjects == ["休講日"]:
+                continue
 
-    # 土日スキップ
-    if weekday in ["土", "日"]:
-        continue
+            expected = list(timetable_true.get(weekday, []))
 
-    if subjects == ["休講日"]:
-        continue
+            subjects_norm = [normalize(x) for x in subjects]
+            expected_norm = [normalize(x) for x in expected]
 
-    expected = list(timetable_true.get(weekday, []))
+            # 完全一致チェック
+            if subjects_norm != expected_norm:
+                diff[d] = {
+                    "actual": subjects_norm,
+                    "expected": expected_norm,
+                }
 
-    subjects_norm = [normalize(x) for x in subjects]
-    expected_norm = [normalize(x) for x in expected]
+                subjects_norm = [s.replace("(4E)","") for s in subjects_norm] #(4E)を消す
+                subjects = []
+                TimeTable = {}
 
-    # 完全一致チェック
-    if subjects_norm != expected_norm:
-        diff[d] = {
-            "actual": subjects_norm,
-            "expected": expected_norm,
-        }
+                for period, subject in zip(range(4),subjects_norm):
+                    Subject = {}
+                    Subject["period"] = period+1
+                    Subject["subject"] = subject
+                    subjects.append(Subject)
 
-        subjects_norm = [s.replace("(4E)","") for s in subjects_norm] #(4E)を消す
-        subjects = []
-        TimeTable = {}
+                TimeTable["subjects"] = subjects
 
-        for period, subject in zip(range(4),subjects_norm):
-            Subject = {}
-            Subject["period"] = period+1
-            Subject["subject"] = subject
-            subjects.append(Subject)
+                numders = re.findall(r"\d+", d)
+                month = int(numders[0])
+                day = int(numders[1])
+                year = datetime.now().year
 
-        TimeTable["subjects"] = subjects
+                TimeTable["date"] = f"{year}-{month:02d}-{day:02d}"
+                main_timetable.append(TimeTable)
+            
+        now_jst = datetime.now(ZoneInfo("Asia/Tokyo"))
+        formatted_time = now_jst.isoformat(timespec='seconds')
 
-        numders = re.findall(r"\d+", d)
-        month = int(numders[0])
-        day = int(numders[1])
-        year = datetime.now().year
+        with lock:
+            TimeTables = {
+                "generated_at": formatted_time,
+                "main_timetable": main_timetable
+            }
 
-        TimeTable["date"] = f"{year}-{month:02d}-{day:02d}"
-        main_timetable.append(TimeTable)
-    
-    TimeTables["main_timetable"] = main_timetable
-
-# 結果表示
-for d, info in diff.items():
-    print(f"=== {d} ===")
-    print("実際:", info["actual"])
-    print("正しい:", info["expected"])
-    print()
+        # 結果表示
+        for d, info in diff.items():
+            print(f"=== {d} ===")
+            print("実際:", info["actual"])
+            print("正しい:", info["expected"])
+            print()
+        
+        #１日待つ
+        time.sleep(86400)
 
 #------------------------------------------------------------------------------------
+
 app = Flask(__name__)
+lock = threading.Lock()
 
 @app.route("/timetable", methods=["GET"])
-
 def handle_get():
-    return Response(
-    json.dumps(TimeTables, ensure_ascii=False, sort_keys=False),
-    mimetype='application/json'
-)
+    with lock:
+        return Response(
+        json.dumps(TimeTables, ensure_ascii=False, sort_keys=False),
+        mimetype='application/json'
+    )
 
 
 if __name__ == "__main__":
     # 0.0.0.0 にすると外部（VPS）からアクセス可能
+    t = threading.Thread(target=scraping, daemon=True)
+    t.start()
     app.run(host="0.0.0.0", port=8080)
+
