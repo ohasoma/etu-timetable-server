@@ -21,206 +21,210 @@ timetable_true = {"月":["保健体育Ⅳ(4E)","半導体デバイス工学(4E)"
 
 def scraping():
     global TimeTables
-
+    hour1 = datetime.now().hour
     while True:
-        # -----------------------------
-        # 1. Chrome を VPS 用に起動
-        # -----------------------------
-        options = Options()
-        options.add_argument("--headless=new")  # 新しいヘッドレスモード
-        options.add_argument("--no-sandbox")  # root 実行時に必須
-        options.add_argument("--disable-dev-shm-usage")  # VPS では必須
-        options.add_argument("--disable-gpu") #GPU無効化
-        options.add_argument("--disable-software-rasterizer")# ソフトウェアによる描画処理を無効化。GPU がない環境での描画エラーを防ぐ。
-        options.add_argument("--window-size=1920,1080") #- 仮想ブラウザの画面サイズを指定。
+        hour2 = datetime.now().hour
+        if hour2 == 0 and hour1 == 23:
+            hour1 = hour2
+            # -----------------------------
+            # 1. Chrome を VPS 用に起動
+            # -----------------------------
+            options = Options()
+            options.add_argument("--headless=new")  # 新しいヘッドレスモード
+            options.add_argument("--no-sandbox")  # root 実行時に必須
+            options.add_argument("--disable-dev-shm-usage")  # VPS では必須
+            options.add_argument("--disable-gpu") #GPU無効化
+            options.add_argument("--disable-software-rasterizer")# ソフトウェアによる描画処理を無効化。GPU がない環境での描画エラーを防ぐ。
+            options.add_argument("--window-size=1920,1080") #- 仮想ブラウザの画面サイズを指定。
 
-        driver = webdriver.Chrome(options=options)#設定したオプションをChromeに渡す
-
-
-        # -----------------------------
-        # 2. ログインページへアクセス
-        # -----------------------------
-        driver.get("https://std.ishikawa-nct.ac.jp/login")
-        time.sleep(1)
-
-        # -----------------------------
-        # 3. ログイン処理
-        # -----------------------------
-        load_dotenv()  # .env を読み込む
-
-        LOGIN_ID = os.getenv("LOGIN_ID")
-        PASSWORD = os.getenv("PASSWORD")
-
-        driver.find_element(By.ID, "login-user").send_keys(LOGIN_ID)
-        driver.find_element(By.ID, "login-password").send_keys(PASSWORD)
-        driver.find_element(By.NAME, "act").click()
-
-        time.sleep(2)
-
-        # -----------------------------
-        # 4. 時間割ページへ移動
-        # -----------------------------
-        TIMETABLE_URL = "https://std.ishikawa-nct.ac.jp/"  # 必要に応じて変更
-        driver.get(TIMETABLE_URL)
-        time.sleep(2)
-
-        # -----------------------------
-        # 5. HTML を取得して BeautifulSoup で解析
-        # -----------------------------
-        soup = BeautifulSoup(driver.page_source, "html.parser")
-
-        # 時間割の <tr> を取得（class="text-center"）
-        rows = soup.find_all("tr", class_="text-center")
-
-        timetable = {}
-        current_date = None
-        buffer = []
-
-        for row in rows:
-            tds = row.find_all("td")
-
-            # 日付セル（rowspan がある）
-            if tds and "rowspan" in tds[0].attrs:
-                # 前の日付のデータを保存
-                if current_date and buffer:
-                    timetable[current_date] = buffer
-                    buffer = []
-
-                current_date = tds[0].get_text(strip=True)
-                tds = tds[1:]  # 日付セルを除く
-
-            # 授業番号行（1,2,3,4 / 5,6,7,8）
-            texts = [td.get_text(strip=True) for td in tds]
-
-            # 空欄を除いて、すべて数字なら番号行としてスキップ
-            if all(t.isdigit() for t in texts if t != ""):
-                continue
-
-            # 授業名行
-            subjects = [td.get_text(strip=True) for td in tds]
-            buffer.extend(subjects)
-
-        # 最後の日付も保存
-        if current_date and buffer:
-            timetable[current_date] = buffer
-
-        driver.quit()
-
-        for d in timetable:
-            buffer = list(dict.fromkeys(timetable[d]))
-            timetable[d] = [subject for subject in buffer if subject != ""]
-
-        # -----------------------------
-        # 6. 結果を表示
-        # -----------------------------
-        for d, subjects in timetable.items():
-            print(f"=== {d} ===")
-            for i, sub in enumerate(subjects, start=1):
-                print(f"{i}コマ目: {sub}")
-            print()
+            driver = webdriver.Chrome(options=options)#設定したオプションをChromeに渡す
 
 
-        #timetable編集
+            # -----------------------------
+            # 2. ログインページへアクセス
+            # -----------------------------
+            driver.get("https://std.ishikawa-nct.ac.jp/login")
+            time.sleep(1)
 
-        timetable2 = copy.deepcopy(timetable)
+            # -----------------------------
+            # 3. ログイン処理
+            # -----------------------------
+            load_dotenv()  # .env を読み込む
 
-        today = list(timetable2.keys())[0]
+            LOGIN_ID = os.getenv("LOGIN_ID")
+            PASSWORD = os.getenv("PASSWORD")
 
-        today_timetable = timetable2.pop(today)
+            driver.find_element(By.ID, "login-user").send_keys(LOGIN_ID)
+            driver.find_element(By.ID, "login-password").send_keys(PASSWORD)
+            driver.find_element(By.NAME, "act").click()
 
-        print(f'今日の時間割:{today_timetable}')
-        print()
+            time.sleep(2)
 
-        #---------------------------------------------------------------------------------------------------------
+            # -----------------------------
+            # 4. 時間割ページへ移動
+            # -----------------------------
+            TIMETABLE_URL = "https://std.ishikawa-nct.ac.jp/"  # 必要に応じて変更
+            driver.get(TIMETABLE_URL)
+            time.sleep(2)
 
-        def get_weekday_from_tail(date_str):
-            # 例: "12月29日(月)" → "月"
-            if len(date_str) < 2:
-                return None
-            return date_str[-2]  # 後ろから2番目
+            # -----------------------------
+            # 5. HTML を取得して BeautifulSoup で解析
+            # -----------------------------
+            soup = BeautifulSoup(driver.page_source, "html.parser")
 
-        def normalize(s):
-            if not s:
-                return s
+            # 時間割の <tr> を取得（class="text-center"）
+            rows = soup.find_all("tr", class_="text-center")
 
-            # 全角カッコを半角に
-            s = s.replace("（", "(").replace("）", ")")
+            timetable = {}
+            current_date = None
+            buffer = []
 
-            # ローマ数字を統一
-            s = s.replace("Ⅰ", "I").replace("Ⅱ", "II").replace("Ⅲ", "III").replace("Ⅳ","IV")
+            for row in rows:
+                tds = row.find_all("td")
 
-            # 全角スペース削除
-            s = s.replace("　", "")
+                # 日付セル（rowspan がある）
+                if tds and "rowspan" in tds[0].attrs:
+                    # 前の日付のデータを保存
+                    if current_date and buffer:
+                        timetable[current_date] = buffer
+                        buffer = []
 
-            # 余分なスペース削除
-            s = re.sub(r"\s+", "", s)
-            
-            return s
+                    current_date = tds[0].get_text(strip=True)
+                    tds = tds[1:]  # 日付セルを除く
 
-        diff = {}
-        main_timetable = []
+                # 授業番号行（1,2,3,4 / 5,6,7,8）
+                texts = [td.get_text(strip=True) for td in tds]
 
-        for d, subjects in timetable.items():
-            weekday = get_weekday_from_tail(d)
+                # 空欄を除いて、すべて数字なら番号行としてスキップ
+                if all(t.isdigit() for t in texts if t != ""):
+                    continue
 
-            # 土日スキップ
-            if weekday in ["土", "日"]:
-                continue
+                # 授業名行
+                subjects = [td.get_text(strip=True) for td in tds]
+                buffer.extend(subjects)
 
-            if subjects == ["休講日"]:
-                continue
+            # 最後の日付も保存
+            if current_date and buffer:
+                timetable[current_date] = buffer
 
-            expected = list(timetable_true.get(weekday, []))
+            driver.quit()
 
-            subjects_norm = [normalize(x) for x in subjects]
-            expected_norm = [normalize(x) for x in expected]
+            for d in timetable:
+                buffer = list(dict.fromkeys(timetable[d]))
+                timetable[d] = [subject for subject in buffer if subject != ""]
 
-            # 完全一致チェック
-            if subjects_norm != expected_norm:
-                diff[d] = {
-                    "actual": subjects_norm,
-                    "expected": expected_norm,
-                }
+            # -----------------------------
+            # 6. 結果を表示
+            # -----------------------------
+            for d, subjects in timetable.items():
+                print(f"=== {d} ===")
+                for i, sub in enumerate(subjects, start=1):
+                    print(f"{i}コマ目: {sub}")
+                print()
 
-                subjects_norm = [s.replace("(4E)","") for s in subjects_norm] #(4E)を消す
-                subjects = []
-                TimeTable = {}
 
-                for period, subject in zip(range(4),subjects_norm):
-                    Subject = {}
-                    Subject["period"] = period+1
-                    Subject["subject"] = subject
-                    subjects.append(Subject)
+            #timetable編集
 
-                TimeTable["subjects"] = subjects
+            timetable2 = copy.deepcopy(timetable)
 
-                numders = re.findall(r"\d+", d)
-                month = int(numders[0])
-                day = int(numders[1])
-                year = datetime.now().year
+            today = list(timetable2.keys())[0]
 
-                TimeTable["date"] = f"{year}-{month:02d}-{day:02d}"
-                main_timetable.append(TimeTable)
-            
-        now_jst = datetime.now(ZoneInfo("Asia/Tokyo"))
-        formatted_time = now_jst.isoformat(timespec='seconds')
+            today_timetable = timetable2.pop(today)
 
-        with lock:
-            TimeTables = {
-                "generated_at": formatted_time,
-                "main_timetable": main_timetable
-            }
-
-        # 結果表示
-        for d, info in diff.items():
-            print(f"=== {d} ===")
-            print("実際:", info["actual"])
-            print("正しい:", info["expected"])
+            print(f'今日の時間割:{today_timetable}')
             print()
         
-        #１日待つ
-        time.sleep(86400)
 
+            #---------------------------------------------------------------------------------------------------------
+
+            def get_weekday_from_tail(date_str):
+                # 例: "12月29日(月)" → "月"
+                if len(date_str) < 2:
+                    return None
+                return date_str[-2]  # 後ろから2番目
+
+            def normalize(s):
+                if not s:
+                    return s
+
+                # 全角カッコを半角に
+                s = s.replace("（", "(").replace("）", ")")
+
+                # ローマ数字を統一
+                s = s.replace("Ⅰ", "I").replace("Ⅱ", "II").replace("Ⅲ", "III").replace("Ⅳ","IV")
+
+                # 全角スペース削除
+                s = s.replace("　", "")
+
+                # 余分なスペース削除
+                s = re.sub(r"\s+", "", s)
+                
+                return s
+
+            diff = {}
+            main_timetable = []
+
+            for d, subjects in timetable.items():
+                weekday = get_weekday_from_tail(d)
+
+                # 土日スキップ
+                if weekday in ["土", "日"]:
+                    continue
+
+                if subjects == ["休講日"]:
+                    continue
+
+                expected = list(timetable_true.get(weekday, []))
+
+                subjects_norm = [normalize(x) for x in subjects]
+                expected_norm = [normalize(x) for x in expected]
+
+                # 完全一致チェック
+                if subjects_norm != expected_norm:
+                    diff[d] = {
+                        "actual": subjects_norm,
+                        "expected": expected_norm,
+                    }
+
+                    subjects_norm = [s.replace("(4E)","") for s in subjects_norm] #(4E)を消す
+                    subjects = []
+                    TimeTable = {}
+
+                    for period, subject in zip(range(4),subjects_norm):
+                        Subject = {}
+                        Subject["period"] = period+1
+                        Subject["subject"] = subject
+                        subjects.append(Subject)
+
+                    TimeTable["subjects"] = subjects
+
+                    numders = re.findall(r"\d+", d)
+                    month = int(numders[0])
+                    day = int(numders[1])
+                    year = datetime.now().year
+
+                    TimeTable["date"] = f"{year}-{month:02d}-{day:02d}"
+                    main_timetable.append(TimeTable)
+                
+            now_jst = datetime.now(ZoneInfo("Asia/Tokyo"))
+            formatted_time = now_jst.isoformat(timespec='seconds')
+
+            with lock:
+                TimeTables = {
+                    "generated_at": formatted_time,
+                    "main_timetable": main_timetable
+                }
+
+            # 結果表示
+            for d, info in diff.items():
+                print(f"=== {d} ===")
+                print("実際:", info["actual"])
+                print("正しい:", info["expected"])
+                print()
+        
+        else:
+            hour1 = hour2
+        time.sleep(1)
 #------------------------------------------------------------------------------------
 TimeTables = {
     "generated_at": None,
