@@ -222,7 +222,10 @@ def scraping():
         time.sleep(86400)
 
 #------------------------------------------------------------------------------------
-
+TimeTables = {
+    "generated_at": None,
+    "main_timetable": []
+}
 app = Flask(__name__)
 lock = threading.Lock()
 
